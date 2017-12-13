@@ -11,18 +11,19 @@ using namespace std;
     
 // declare parameters
 const int   deathAge = 0;
-const int   N = 1000;
+const int   N = 20;
 const int   S = 100; // m^2
-const int   maxTime = 1;
+const int   maxTime = 1000;
 const double beta = 1.0;      // <THEO 12/12>
 const int    kappa = 1;       // <THEO 12/12>
 const double meanSize = 2.0; //added by Raph 12/12
 const double stdSize = 3.0; //added by Raph 12/12
 const double precision = 0.000001; // added by Raph 12/12, precision threshold to say if a number is equal to zero
-const int maxSampling = 1000; // cannot resample the size of an individual more than this number if the size happen to be too small
-bernoulli_distribution mutationEvent(0.05);
+const int maxSampling = 1000; // can't resample the size of an individual more than this number if the size is too small
+bernoulli_distribution mutationEvent(0.05); // mutation rate
 normal_distribution <double> bodySizeDistribution(meanSize, stdSize); //added by Raph 12/12
-normal_distribution <double> mutation(0.0, 0.1); // <THEO 12/12>
+normal_distribution <double> mutation(0.0, 0.1); // <THEO 12/12> // distribution mutation steps
+// mutation std = 0.5 allows to go from values around 3.0 at gen0 to ~15.0 at gen1000
 
 
 // RANDOM NUMBER GENERATOR
@@ -36,7 +37,7 @@ mt19937_64 rng;
     
 // class of individuals
 struct ind {
-        double  size;
+        double  size = 0; // <THEO 13/12>
         bool    hasFood = false;
         int     age = 0;
     };
@@ -98,16 +99,12 @@ struct ind {
             vector <ind> population(N);
             assert(population.size() == N);
             
-            vector <int> crematorium;
-            
-            // Initialize the size of the individuals from a normal distribution with a given mean and standard deviation (Raph 12/12)
+            // Initialize size of individuals from normal distribution with given mean and standard deviation (Raph 12/12)
             for (int i = 0; i < population.size(); ++i) {
                 int a = 0;
                 do {
-                    
                     population[i].size = bodySizeDistribution(rng);
                     ++a;
-                    
                     // If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
                     // but not too many times
                 } while (population[i].size <= precision && a < maxSampling);
@@ -120,7 +117,7 @@ struct ind {
             
             
             // generation step loop
-            for(int t = 0; t < maxTime || population.size() > 1; ++t) {
+            for(int t = 1; t <= maxTime; ++t) {
                 
                 // Check if there still are individuals in the population
                 if (population.empty()){
@@ -146,6 +143,7 @@ struct ind {
                 // (Re)Shuffling the population vector
                 shuffleVector(population, rng);
                 
+                /*
                 // 2 - Assign individuals to resource patches
                 for (int i = 0; i < population.size(); ++i)
                     foodPatches[i].push_back(i);
@@ -179,54 +177,62 @@ struct ind {
                     }
                 }
                 
-                
+                */
                 
                 // 3 - Reproductive step of preys
                 
                  // Identify current breeding individuals
-                 int iNbBreeders = population.size();
-                
+                 int iCurrentPop = population.size();
+                cout << "Gen" << t << " population size = " << iCurrentPop << endl;
                  vector <ind> populationNew; // <THEO 12/12>
 
-                 for (int i = 0; i < iNbBreeders; ++i) {
-                     
+                 for (int i = 0; i < iCurrentPop; ++i) {
                      // increment ageing <THEO 12/12>
                      assert( !(population[i].age < 0) && !(population[i].age > deathAge) );
                      ++population[i].age;
+                     cout << "Adult   of size " << population[i].size << " and " << population[i].age << " gen old"<< endl;
                      
                      // Add breeder to the next gen population if not too old  // <THEO 12/12>
                      if (population[i].age < deathAge)
                          populationNew.push_back(population[i]);
                      
                      // Produce a number of offspring based on size // <THEO 12/12>
+                     population[i].hasFood = true;
                      if (population[i].hasFood) {
                      
                          // expense food on offspring production
                          population[i].hasFood = false;
                  
-                         int iLitterSize = getNbOffspring(population[i].size, iNbBreeders);
+                         int iLitterSize = 1 ;//getNbOffspring(population[i].size, iCurrentPop);
                  
                          for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
                      
                              // Create a new individual that is a clone of its parent with age 0
                              ind newborn = population[i];
                              newborn.age = 0;
-                     
+                             
                              // Draw a mutation event // <THEO 12/12>
                              if (mutationEvent(rng)) {
+                                 cout << "<MUTATION> ";
                                  double mutationStep;
                                  do {
                                      mutationStep = mutation(rng);
                                  } while (newborn.size + mutationStep < 0);
                                  newborn.size += mutationStep;
                              }
+                             cout << "Newborn of size " << newborn.size << " and " << newborn.age << " gen old" << endl;
                              // Add new individual to the next gen population
                              populationNew.push_back(newborn);  // <THEO 12/12>
                          }
                      }
                  // else nothing happens, no food no baby (or babies but they die right away from starvation)
+                     
                  }
+                cout << "Gen" << t << " pop size before reproduction & death = " << iCurrentPop << endl;
+                cout << "Gen" << t << " pop size after  reproduction & death = " << populationNew.size() << endl;
+                
                 population = populationNew;
+                
                 if (population.empty()){
                     cerr << "Generation " << t << ": population went extinct\n";
                     exit(EXIT_SUCCESS);
