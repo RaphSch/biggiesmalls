@@ -75,8 +75,6 @@ struct ind {
         
         poisson_distribution<int> offspringDistribution (meanNbOffspring);
         int nbOffspring = offspringDistribution(rng);
-        if (nbOffspring > 10)
-            nbOffspring = 10;
         return nbOffspring;
     }
 
