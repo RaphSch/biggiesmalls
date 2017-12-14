@@ -93,7 +93,7 @@ struct ind {
                 throw runtime_error("meanSize cannot be zero or negative");
             if (stdSize <= 0.0)
                 throw runtime_error("stdSize cannot be zero or negative");
-            if (precision < 0.0)
+            if (minBodySize < 0.0)
                 throw runtime_error("precision cannot be zero");
             
             // set random seed
