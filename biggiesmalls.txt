@@ -13,13 +13,14 @@ using namespace std;
 const int   deathAge = 0;
 const int   N = 20;
 const int   S = 100; // m^2
-const int   maxTime = 1000;
-const double beta = 1.0;      // <THEO 12/12>
-const int    kappa = 1;       // <THEO 12/12>
+const int   maxTime = 5;
+const double beta = 1.0;     // tuning parameter for the effect of size on offsrping production <THEO 13/12>
+const double kappa = 2.0;    // basal number of offspring produced when beta = 0 <THEO 13/12>
+const double epsilon = 1.0;  // scaling parameter for offsrping production <THEO 13/12>
 const double meanSize = 2.0; //added by Raph 12/12
-const double stdSize = 3.0; //added by Raph 12/12
-const double precision = 0.000001; // added by Raph 12/12, precision threshold to say if a number is equal to zero
-const int maxSampling = 1000; // can't resample the size of an individual more than this number if the size is too small
+const double stdSize = 3.0;  //added by Raph 12/12
+const double minBodySize = 0.1; // added by Raph 12/12, precision threshold to say if a number is equal to zero // min size <THEO 14/12>
+const int maxSampling = 1000; // cannot resample the size of an individual more than this number if the size happen to be too small
 bernoulli_distribution mutationEvent(0.05); // mutation rate
 normal_distribution <double> bodySizeDistribution(meanSize, stdSize); //added by Raph 12/12
 normal_distribution <double> mutation(0.0, 0.1); // <THEO 12/12> // distribution mutation steps
@@ -68,10 +69,14 @@ struct ind {
     }
 
     // determine the litter size of an individual <THEO 12/12>
-    int getNbOffspring(const double &parentSize, const int &popSize){
-        double meanNbOffspring = beta / parentSize + (1 - beta) / popSize * kappa;
+    int getNbOffspring(const double &parentSize){
+        
+        double meanNbOffspring = (beta / parentSize + (1.0 - beta) * kappa) * epsilon;
+        
         poisson_distribution<int> offspringDistribution (meanNbOffspring);
         int nbOffspring = offspringDistribution(rng);
+        if (nbOffspring > 10)
+            nbOffspring = 10;
         return nbOffspring;
     }
 
@@ -81,6 +86,9 @@ struct ind {
     int main() {
         
         try {
+            //assert( !(alpha < 0) && !(alpha > 1) );
+            assert( !(beta < 0) && !(beta > 1) );
+            //assert( !(gamma < 0) && !(gamma > 1) );
             
             // Raph 12/12 security check
             if (meanSize <= 0.0)
@@ -99,7 +107,7 @@ struct ind {
             vector <ind> population(N);
             assert(population.size() == N);
             
-            // Initialize size of individuals from normal distribution with given mean and standard deviation (Raph 12/12)
+            // Initialize the size of the individuals from a normal distribution with a given mean and standard deviation (Raph 12/12)
             for (int i = 0; i < population.size(); ++i) {
                 int a = 0;
                 do {
@@ -107,8 +115,8 @@ struct ind {
                     ++a;
                     // If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
                     // but not too many times
-                } while (population[i].size <= precision && a < maxSampling);
-                if (population[i].size < precision)
+                } while (population[i].size <= minBodySize && a < maxSampling);
+                if (population[i].size < minBodySize)
                     throw runtime_error("negative values of body size were generated");
                 //cout << population[i].size << ' ';
             }
@@ -203,7 +211,7 @@ struct ind {
                          // expense food on offspring production
                          population[i].hasFood = false;
                  
-                         int iLitterSize = 1 ;//getNbOffspring(population[i].size, iCurrentPop);
+                         int iLitterSize = getNbOffspring(population[i].size);
                  
                          for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
                      
@@ -217,7 +225,7 @@ struct ind {
                                  double mutationStep;
                                  do {
                                      mutationStep = mutation(rng);
-                                 } while (newborn.size + mutationStep < 0);
+                                 } while (newborn.size + mutationStep <= 0.1);  // <THEO 14/12> constrain mutation to min size
                                  newborn.size += mutationStep;
                              }
                              cout << "Newborn of size " << newborn.size << " and " << newborn.age << " gen old" << endl;
