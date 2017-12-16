@@ -4,399 +4,260 @@
 # include <iostream>
 # include <cassert>
 # include <exception>
-# include <array>
-
+    
 using namespace std;
-
+    
 // GLOBAL CONSTANTS
-
+    
 // declare parameters
-const int   deathAge = 0;
-const int deathAgePredators = 2; // lifespan of predators (in yrs)
-const int   N = 1000;
+const int   deathAge = 1;
+const int   N = 20;
 const int   S = 100; // m^2
-const int   maxTime = 100;
-const double beta = 1.0;      // <THEO 12/12>
-const int    kappa = 1;       // <THEO 12/12>
-const double gamma = 1.0; // Raph 13/12, the importance of size in determining the probability of predation, 0: no dependency, 1: probabilities are proportional to size, >1: probabilities are skewed towards the largest individual
-const double meanSize0 = 2.0; //added by Raph 12/12
-const double stdSize0 = 3.0; //added by Raph 12/12
-const double precision = 0.000001; // added by Raph 12/12, precision threshold to say if a number is equal to zero
-const int maxSampling = 1000; // can't resample the size of an individual more than this number if the size is too small
-const double mutationalVariance = 0.1; // added by Raph 13/12, we need to be able to pass this number as an argument to the main function
-const double mutationRate = 0.5;
-bernoulli_distribution mutationEvent(mutationRate); // mutation rate
-normal_distribution <double> bodySizeDistribution(meanSize0, stdSize0); //added by Raph 12/12
-normal_distribution <double> mutation(0.0, mutationalVariance); // <THEO 12/12> // distribution mutation steps
+const int   maxTime = 10;
+const double beta = 1.0;     // tuning parameter for the effect of size on offsrping production <THEO 13/12>
+const double kappa = 2.0;    // basal number of offspring produced when beta = 0 <THEO 13/12>
+const double epsilon = 1.0;  // scaling parameter for offsrping production <THEO 13/12>
+const double meanSize = 2.0; //added by Raph 12/12
+const double stdSize = 3.0;  //added by Raph 12/12
+const double minBodySize = 0.1; // added by Raph 12/12, precision threshold to say if a number is equal to zero // min size <THEO 14/12>
+const int maxSampling = 1000; // cannot resample the size of an individual more than this number if the size happen to be too small
+bernoulli_distribution mutationEvent(0.5); // mutation rate
+normal_distribution <double> bodySizeDistribution(meanSize, stdSize); //added by Raph 12/12
+normal_distribution <double> mutation(0.0, 0.1); // <THEO 12/12> // distribution mutation steps
 // mutation std = 0.5 allows to go from values around 3.0 at gen0 to ~15.0 at gen1000
-const int initPredatorDensity = 5;
-const double killConversion = 2.0; // Proportion of a killed prey that produces a predator offspring
+
 
 // RANDOM NUMBER GENERATOR
-
+    
 // declare rng
 mt19937_64 rng;
-
+    
 // CLASSES
-
+    
+// declare predators
+    
 // class of individuals
 struct ind {
-	double  size = 0; // <THEO 13/12>
-	bool    hasFood = false;
-	int     age = 0;
-	bool isEaten = false;
-};
-
-// ACCESSORY FUNCTION
-
-// Function to shuffle a vector (added by Raph 12/12)
-void shuffleVector(vector<ind> &vec, mt19937_64 &rng) {
-
-	// For each position in the vector (starting from the end)...
-	for (int i = vec.size() - 1; i > 0; --i) {
-
-		// Create a distribution of random numbers between 0 and i
-		uniform_int_distribution<int> randomNumber(0, i);
-
-		// Draw a random position placed before it in the vector
-		int j = randomNumber(rng);
-		assert(j <= i);
-		assert(j >= 0);
-
-		// Swap the two positions
-		ind tmp = vec[i];
-		vec[i] = vec[j];
-		vec[j] = tmp;
-
-	}
-
-}
-
-// determine the litter size of an individual <THEO 12/12>
-int getNbOffspring(const double &parentSize, const int &popSize) {
-	double meanNbOffspring = beta / parentSize + (1 - beta) / popSize * kappa;
-	poisson_distribution<int> offspringDistribution(meanNbOffspring);
-	int nbOffspring = offspringDistribution(rng);
-	return nbOffspring;
-}
-
-
-
-// MAIN FUNCTION
-
-int main() {
-
-	try {
-
-		// Raph 12/12 security check
-		if (meanSize0 <= 0.0)
-			throw runtime_error("meanSize cannot be zero or negative");
-		if (stdSize0 <= 0.0)
-			throw runtime_error("stdSize cannot be zero or negative");
-		if (precision < 0.0)
-			throw runtime_error("precision cannot be zero");
-
-		// set random seed
-		auto tp = chrono::high_resolution_clock::now();
-		unsigned seed = static_cast<unsigned>(tp.time_since_epoch().count());
-		rng.seed(seed);
-
-		// Declare an initial population of N individuals
-		vector <ind> population(N);
-		assert(population.size() == N);
-
-		// Initialize size of individuals from normal distribution with given mean and standard deviation (Raph 12/12)
-		for (int i = 0; i < population.size(); ++i) {
-			int a = 0;
-			do {
-				population[i].size = bodySizeDistribution(rng);
-				++a;
-				// If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
-				// but not too many times
-			} while (population[i].size <= precision && a < maxSampling);
-			if (population[i].size < precision)
-				throw runtime_error("negative values of body size were generated");
-			//cout << population[i].size << ' ';
-		}
-		//cout << endl;
-
-		// Initialize predator population
-		if (initPredatorDensity < 0)
-			throw runtime_error("initial density of predators cannot be negative");
-		if (deathAgePredators <= 0)
-			throw runtime_error("death rate of predators must be at least one year");
-
-		int nPredators = initPredatorDensity;
-		bool isExtinctPredator = initPredatorDensity == 0 ? true : false;
-		vector<int> birthRecord(deathAgePredators); // vector recording number of predator born in the last <predator lifespan> years
-		assert(birthRecord.size() == deathAgePredators);
-		
-		if (initPredatorDensity == 0)
-			cout << "Simulation with no predators" << endl;
-		
-
-		// generation step loop
-		for (int t = 1; t <= maxTime; ++t) {
-
-			//cout << t << endl;
-
-			// Check if there still are individuals in the population
-			if (population.empty()) {
-				cerr << "Generation " << t << ": population went extinct\n";
-				exit(EXIT_SUCCESS);
-			}
-
-			
-			// Declare the number of food patches available as defined by island surface
-			// foodPatches is a vector of subvectors: each subvector says which individuals are on the patch
-			array <vector<int>, S> foodPatches;
-			assert(foodPatches.size() == S);
-			
-			
-
-			// (Re)Shuffling the population vector
-			shuffleVector(population, rng);
-
-			
-			// 1 - ASSIGNING INDIVIDUALS TO FOOD PATCHES
-			for (int i = 0; i < population.size(); ++i) {
-				foodPatches[i % S].push_back(i);
-			}
-			
-
-			
-			// 2 - PREDATION
-
-			// Vector of survivors of predation
-			vector<ind> survivors;
-
-			int nKills = 0;
-			if (!isExtinctPredator) {
-
-				// Every predator picks a patch at random, and if preys are present, eats one
-				for (int j = 0; j < nPredators; ++j) {
-
-					// Pick a patch
-					uniform_int_distribution<int> pickPatch(0, S - 1);
-					int patch = pickPatch(rng);
-					assert(patch >= 0 && patch <= S - 1);
-
-					int prey;
-
-					// If there is one individual on that patch, eat it
-					if (foodPatches[patch].size() >= 1) {
-						if (foodPatches[patch].size() == 1)
-							prey = 0;
-
-						// If there are more...
-						else if (foodPatches[patch].size() > 1) {
-
-							// Probabilities of each individual in the patch to be caught, depending on body size(or not if gamma = 0)
-							vector<double> probCatch(foodPatches[patch].size());
-							assert(probCatch.size() == foodPatches[patch].size());
-							double sum = 0.0;
-							for (int i = 0; i < foodPatches[patch].size(); ++i) {
-								probCatch[i] = pow(population[foodPatches[patch][i]].size, exp(gamma) - 1.0);
-								sum += probCatch[i];
-							}
-							for (int i = 0; i < foodPatches[patch].size(); ++i) {
-								probCatch[i] /= sum;
-								assert(probCatch[i] >= 0.0 && probCatch[i] <= 1.0);
-							}
-							
-							// Pick a random prey
-							discrete_distribution<int> pickPrey(probCatch.begin(), probCatch.end());
-							prey = pickPrey(rng);
-							assert(prey >= 0 && prey < foodPatches[patch].size());
-						}
-
-						// Prey is eaten
-						population[foodPatches[patch][prey]].isEaten = true;
-
-						// Prey is removed from the patch
-						vector<int> patchSurvivors;
-						for (int i = 0; i < foodPatches[patch].size(); ++i)
-							if(i != prey)
-								patchSurvivors.push_back(i);
-						assert(patchSurvivors.size() == foodPatches[patch].size() - 1);
-
-						foodPatches[patch] = patchSurvivors;
-
-						// Update the number of kills
-						++nKills;
-					}
-					
-				} // end of loop through predators
-
-				// Population will be updated later (otherwise competition step bugs)
-
-			} // end of predation
-			
-		
-			
-			
-			// 3 - ASYMETRIC COMPETITION
-			// For each patch...
-			for (int p = 0; p < foodPatches.size(); ++p) {
-				
-				// If that patch is occupied by more than one indiv, then competition happens
-				if (foodPatches[p].size() > 1) {
-
-					// Record the sizes of the individuals competing for a patch
-					vector<double> competingSizes(foodPatches[p].size());
-					assert(competingSizes.size() == foodPatches[p].size());
-					
-					
-					for (int j = 0; j < competingSizes.size(); ++j) {
-						competingSizes[j] = population[foodPatches[p][j]].size;
-						assert(competingSizes[j] >= precision);
-					}
-
-					// Draw the outcome of competition
-					discrete_distribution<int> competitionEvent(competingSizes.begin(), competingSizes.end());
-					const int competitionOutcome = competitionEvent(rng);
-					int iWinner = foodPatches[p][competitionOutcome];
-					
-					// The winner receives the food
-					for (int j = 0; j < competingSizes.size(); ++j)
-						population[foodPatches[p][j]].hasFood = foodPatches[p][j] == iWinner ? true : false;
-				
-				}
-
-				// If only one individual, then it takes the food
-				else if (foodPatches[p].size() == 1) {
-					population[foodPatches[p][0]].hasFood = true;
-				}
-				
-			}
-			
-			
-			// Who survived?
-			for (int i = 0; i < population.size(); ++i) {
-				if (!population[i].isEaten)
-					survivors.push_back(population[i]);
-			}
-			assert(survivors.size() <= population.size());
-
-			// Only survivors of predation remain in the population
-			population = survivors;
-			
-
-			// 4 - REPRODUCTION OF PREYS
-
-			// Identify current breeding individuals
-			int iCurrentPop = population.size();
-			//cout << "Gen" << t << " population size = " << iCurrentPop << endl;
-			vector <ind> populationNew; // <THEO 12/12>
-
-			for (int i = 0; i < iCurrentPop; ++i) {
-				// increment ageing <THEO 12/12>
-				assert(!(population[i].age < 0) && !(population[i].age > deathAge));
-				++population[i].age;
-				//cout << "Adult   of size " << population[i].size << " and " << population[i].age << " gen old" << endl;
-
-				// Add breeder to the next gen population if not too old  // <THEO 12/12>
-				if (population[i].age < deathAge)
-					populationNew.push_back(population[i]);
-
-				// Produce a number of offspring based on size // <THEO 12/12>
-				population[i].hasFood = true;
-				if (population[i].hasFood) {
-
-					// expense food on offspring production
-					population[i].hasFood = false;
-
-					int iLitterSize = 1;//getNbOffspring(population[i].size, iCurrentPop);
-
-					for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
-
-						// Create a new individual that is a clone of its parent with age 0
-						ind newborn = population[i];
-						newborn.age = 0;
-
-						// Draw a mutation event // <THEO 12/12>
-						if (mutationEvent(rng)) {
-							//cout << "<MUTATION> ";
-							double mutationStep;
-							do {
-								mutationStep = mutation(rng);
-							} while (newborn.size + mutationStep < 0);
-							newborn.size += mutationStep;
-						}
-						//cout << "Newborn of size " << newborn.size << " and " << newborn.age << " gen old" << endl;
-						// Add new individual to the next gen population
-						populationNew.push_back(newborn);  // <THEO 12/12>
-					}
-				}
-				// else nothing happens, no food no baby (or babies but they die right away from starvation)
-
-			}
-			//cout << "Gen" << t << " pop size before reproduction & death = " << iCurrentPop << endl;
-			//cout << "Gen" << t << " pop size after  reproduction & death = " << populationNew.size() << endl;
-
-			population = populationNew;
-
-			if (population.empty()) {
-				cerr << "Generation " << t << ": population went extinct\n";
-				exit(EXIT_SUCCESS);
-			}
-
-			
-			// 5 - REPRODUCTION AND DEATH OF PREDATORS
-			
-			if (!isExtinctPredator) {
-
-				// Reproduction
-				int nBabyPredators = floor(nKills * killConversion);
-				assert(nBabyPredators >= 0);
-				//cout << nPredators << " + " << nBabyPredators << " = ";
-				nPredators += nBabyPredators;
-				//cout << nPredators << endl;
-
-				// If time step < predator lifespan record births every year
-				if (t < deathAgePredators)
-					birthRecord[t] = nPredators;
-				else {
-
-					// Otherwise, update birth records
-					for (int j = 0; j < birthRecord.size(); ++j)
-						birthRecord[j] = j == deathAgePredators - 1 ? nBabyPredators : birthRecord[j + 1];
-					
-					// And mortality happens
-					nPredators -= birthRecord[0]; // all predators who were born <lifespan> years ago die now
-
-				}
-
-				//cout << "Time " << t << ": " << nBabyPredators << " births and " << birthRecord[0] << " deaths" << endl;
-				
-				/*
-				for (int kk = 0; kk < deathAgePredators; ++kk)
-					cout << birthRecord[kk] << ' ';
-				cout << endl;
-				*/
-
-				//cout << nPredators << endl;
-
-			}
-			
-			
-			
-			// Warning if predators go extinct
-			if (nPredators <= 0 && !isExtinctPredator) {
-				cerr << "Generation " << t << ": predators went extinct\n";
-				isExtinctPredator = true;
-			}
-			
-			cout << "Time " << t << ": " << population.size() << " preys and " << nPredators << " predators" << endl;
-				
-		} // end of loop through time steps
-
-	}
-	catch (exception &error) {
-		cerr << "Error: " << error.what() << endl;
-		exit(1);
-	}
-
-
-	return 0;
-}
+        double  size = 0; // <THEO 13/12>
+        bool    hasFood = false;
+        int     age = 0;
+    };
+    
+    // ACCESSORY FUNCTION
+    
+    // Function to shuffle a vector (added by Raph 12/12)
+    void shuffleVector(vector<ind> &vec, mt19937_64 &rng) {
+        
+        // For each position in the vector (starting from the end)...
+        for (int i = vec.size() - 1; i > 0; --i) {
+            
+            // Create a distribution of random numbers between 0 and i
+            uniform_int_distribution<int> randomNumber(0, i);
+            
+            // Draw a random position placed before it in the vector
+            int j = randomNumber(rng);
+            assert(j <= i);
+            assert(j >= 0);
+            
+            // Swap the two positions
+            ind tmp = vec[i];
+            vec[i] = vec[j];
+            vec[j] = tmp;
+            
+        }
+        
+    }
+
+    // determine the litter size of an individual <THEO 12/12>
+    int getNbOffspring(const double &parentSize){
+        
+        double meanNbOffspring = (beta / parentSize + (1.0 - beta) * kappa) * epsilon;
+        
+        poisson_distribution<int> offspringDistribution (meanNbOffspring);
+        int nbOffspring = offspringDistribution(rng);
+        if (nbOffspring > 10)
+            nbOffspring = 10;
+        return nbOffspring;
+    }
+
+    
+    // MAIN FUNCTION
+    
+    int main() {
+        
+        try {
+            //assert( !(alpha < 0) && !(alpha > 1) );
+            assert( !(beta < 0) && !(beta > 1) );
+            //assert( !(gamma < 0) && !(gamma > 1) );
+            
+            // Raph 12/12 security check
+            if (meanSize <= 0.0)
+                throw runtime_error("meanSize cannot be zero or negative");
+            if (stdSize <= 0.0)
+                throw runtime_error("stdSize cannot be zero or negative");
+            if (minBodySize < 0.0)
+                throw runtime_error("precision cannot be zero");
+            
+            // set random seed
+            auto tp = chrono::high_resolution_clock::now();
+            unsigned seed = static_cast<unsigned>(tp.time_since_epoch().count());
+            rng.seed(seed);
+            
+            // Declare an initial population of N individuals
+            vector <ind> population(N);
+            assert(population.size() == N);
+            
+            // Initialize the size of the individuals from a normal distribution with a given mean and standard deviation (Raph 12/12)
+            for (int i = 0; i < population.size(); ++i) {
+                int a = 0;
+                do {
+                    population[i].size = bodySizeDistribution(rng);
+                    ++a;
+                    // If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
+                    // but not too many times
+                } while (population[i].size <= minBodySize && a < maxSampling);
+                if (population[i].size < minBodySize)
+                    throw runtime_error("negative values of body size were generated");
+                //cout << population[i].size << ' ';
+            }
+            //cout << endl;
+            
+            
+            
+            // generation step loop
+            for(int t = 1; t <= maxTime; ++t) {
+                
+                // Check if there still are individuals in the population
+                if (population.empty()){
+                    cerr << "Generation " << t << ": population went extinct\n";
+                    exit(EXIT_SUCCESS);
+                }
+                
+                // Declare the number of food patches available as defined by island surface
+                // foodPatches is a vector of subvectors: each subvector says which individuals are on the patch
+                vector <vector<int> > foodPatches(S);
+                assert(foodPatches.size() == S);
+                
+                // 1 - Predation
+                // for each predator {
+                //      for x preys {
+                //          pick a random prey based on its weight
+                //          add preys resource stock to predator stock
+                //          ¡ remove dead preys ! crematorium.push_back(i) + removal
+                
+                //      }
+                // }
+                
+                // (Re)Shuffling the population vector
+                shuffleVector(population, rng);
+                
+                /*
+                // 2 - Assign individuals to resource patches
+                for (int i = 0; i < population.size(); ++i)
+                    foodPatches[i].push_back(i);
+                
+                // 3 - Asymetric competition (Raph 12/12)
+                // For each patch...
+                for (int p = 0; p < foodPatches.size(); ++p) {
+                    
+                    // If that patch is occupied by more than one indiv, then competition happens
+                    if (foodPatches[p].size() > 1) {
+                        
+                        // Record the sizes of the individuals competing for a patch
+                        vector<double> competingSizes(foodPatches[p].size());
+                        
+                        for (int j = 0; j < competingSizes.size(); ++j)
+                            competingSizes[j] = population[foodPatches[p][j]].size;
+                        
+                        // Draw the outcome of competition
+                        discrete_distribution<int> competitionEvent(competingSizes.begin(), competingSizes.end());
+                        const int competitionOutcome = competitionEvent(rng);
+                        int iWinner = foodPatches[p][competitionOutcome];
+                        
+                        // The winner receives the food
+                        for (int j = 0; j < competingSizes.size(); ++j)
+                            population[foodPatches[p][j]].hasFood = foodPatches[p][j] == iWinner ? true : false;
+                    }
+                    
+                    // If only one individual, then it takes the food
+                    else if (foodPatches[p].size() == 1) {
+                        population[foodPatches[p][0]].hasFood = true;
+                    }
+                }
+                
+                */
+                
+                // 3 - Reproductive step of preys
+                
+                 // Identify current breeding individuals
+                 int iCurrentPop = population.size();
+                cout << "Gen" << t << " population size = " << iCurrentPop << endl;
+                 vector <ind> populationNew; // <THEO 12/12>
+
+                 for (int i = 0; i < iCurrentPop; ++i) {
+                     // increment ageing <THEO 12/12>
+                     assert( !(population[i].age < 0) && !(population[i].age > deathAge) );
+                     ++population[i].age;
+                     //cout << "Adult   of size " << population[i].size << " and " << population[i].age << " gen old"<< endl;
+                     
+                     // Add breeder to the next gen population if not too old  // <THEO 12/12>
+                     if (population[i].age <= deathAge)
+                         populationNew.push_back(population[i]);
+                     
+                     // Produce a number of offspring based on size // <THEO 12/12>
+                     population[i].hasFood = true;
+                     if (population[i].hasFood) {
+                     
+                         // expense food on offspring production
+                         population[i].hasFood = false;
+                 
+                         int iLitterSize = getNbOffspring(population[i].size);
+                 
+                         for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
+                     
+                             // Create a new individual that is a clone of its parent with age 0
+                             ind newborn = population[i];
+                             newborn.age = 0;
+                             
+                             // Draw a mutation event // <THEO 12/12>
+                             if (mutationEvent(rng)) {
+                                 //cout << "<MUTATION> ";
+                                 double mutationStep;
+                                 do {
+                                     mutationStep = mutation(rng);
+                                 } while (newborn.size + mutationStep <= 0.1);  // <THEO 14/12> constrain mutation to min size
+                                 newborn.size += mutationStep;
+                             }
+                             //cout << "Newborn of size " << newborn.size << " and " << newborn.age << " gen old" << endl;
+                             // Add new individual to the next gen population
+                             populationNew.push_back(newborn);  // <THEO 12/12>
+                         }
+                     }
+                 // else nothing happens, no food no baby (or babies but they die right away from starvation)
+                     
+                 }
+                cout << "Gen" << t << " pop size before reproduction & death = " << iCurrentPop << endl;
+                cout << "Gen" << t << " pop size after  reproduction & death = " << populationNew.size() << endl;
+                
+                population = populationNew;
+                
+                if (population.empty()){
+                    cerr << "Generation " << t << ": population went extinct\n";
+                    exit(EXIT_SUCCESS);
+                }
+                
+                // 4 - Reproductive step of predators
+                
+                
+                
+            } // end of loop through time steps
+            
+        }
+        catch (exception &error) {
+            cerr << "Error: " << error.what() << endl;
+            exit(1);
+        }
+        
+        
+        return 0;
+    }
