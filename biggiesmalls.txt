@@ -9,6 +9,7 @@
 # include <cstdlib>
 # include <fstream>
 # include <sstream>
+//# define NDEBUG
 
 using namespace std;
 
@@ -107,19 +108,21 @@ int main(int argc, char* argv[]) {
         const int maxNOffspring = 10; // Max number of offspring per prey
         
         // Parameters that may be overwritten if command-line arguments are provided
-        int N = 100; // Initial population size
+        int N = 10; // Initial population size
         int S = 100; // Island size (number of patches on the island)
-        int maxTime = 100; // Max duration of the simulation
-        int deathAge = 0; // Lifespan of the preys (generations)
-        int deathAgePredators = 2; // Lifespan of the predators (generations)
-        int initPredatorDensity = 5; // Initial popultion size of the predators
-        int growth0 = 1; // Basal number of offspring of the preys when reproduction is size independent
-        double meanSize0 = 2.0; // Mean body size in the mainland (source) population
-        double stdSize0 = 3.0; // Standard deviation of body size on the mainland
-        double killConversion = 2.0; // Proportion of a killed prey that produces predator offspring
-        double mutationalVariance = 0.1; // Standard deviation of the normal distribution describing mutational effects
-        double mutationRate = 0.5; // Mutation rate (generation-1)
-        
+        int maxTime = 10000; // Max duration of the simulation
+        int deathAge = 1; // Lifespan of the preys (generations)
+        int deathAgePredators = 1; // Lifespan of the predators (generations)
+        int initPredatorDensity = 50; // Initial popultion size of the predators
+        int growth0 = 2; // Basal number of offspring of the preys when reproduction is size independent
+        int maxReplicates = 5;
+        double meanSize0 = 0.5; // Mean body size in the mainland (source) population
+        double stdSize0 = 0.1; // Standard deviation of body size on the mainland
+        double killConversion = 0.5; // Proportion of a killed prey that produces predator offspring
+        double mutationalVariance = 0.5; // Standard deviation of the normal distribution describing mutational effects
+        double mutationRate = 0.1; // Mutation rate (generation-1)
+        double predationPressure = 0.3;
+
         const double alpha0 = 1.0, beta0 = 1.0, gamma0 = 1.0; // default values of parameters of dependency of ecological forces on body size
         
         // PASSING ARGUMENTS
@@ -135,24 +138,27 @@ int main(int argc, char* argv[]) {
         // If arguments are provided, read them
         if (argc > 1) {
             
+            if (argc % 2 != 1)
+                throw runtime_error("Wrong number of arguments");
+            
             for (int i = 1; i < argc; ) {
                 
                 // Read the argument
                 string argument = string(argv[i]);
                 
                 // Check it
-                vector<string> possibleArguments = { "-N", "-S", "-maxTime", "-deathAge", "-deathAgePredators", "-initPredatorDensity", "-growth0", "-meanSize0", "-stdSize0", "-killConversion", "-mutationalVariance", "-mutationRate", "-alpha", "-beta", "-gamma" };
+                vector <string> possibleArguments = { "-N", "-S", "-maxTime", "-deathAge", "-deathAgePredators", "-initPredatorDensity", "-growth0","-maxReplicates", "-meanSize0", "-stdSize0", "-killConversion", "-mutationalVariance", "-mutationRate","-predationPressure", "-alpha", "-beta", "-gamma" };
                 int matchArgument = 0;
                 int whichArgument = 0;
                 for(int j = 0; j < possibleArguments.size(); ++j)
-                    if (argument == possibleArguments[i]) {
+                    if (argument == possibleArguments[j]) {
                         ++matchArgument;
-                        whichArgument = i;
+                        whichArgument = j;
                     }
                 if (matchArgument < 1)
                     throw runtime_error("unexpected argument");
                 if (matchArgument > 1)
-                    throw runtime_error("same argumentn provided several times");
+                    throw runtime_error("same argument provided several times");
                 
                 // Read the value that follows
                 istringstream ss(argv[i + 1]);
@@ -166,58 +172,55 @@ int main(int argc, char* argv[]) {
                 double dArg, dValue; // if argument is a double
                 string sArg, inputFileName; // if argument is a string
                 
-                /*
-                 if (whichArgument <= 6)
-                 if (ss >> iArg) {
-                 iValue = atoi(argv[i + 1]);
-                 switch (whichArgument) {
-                 case 0: N = iValue; break;
-                 case 1: S = iValue; break;
-                 case 2: maxTime = iValue; break;
-                 case 3: deathAge = iValue; break;
-                 case 4: deathAgePredators = iValue; break;
-                 case 5: initPredatorDensity = iValue; break;
-                 case 6: growth0 = iValue; break;
-                 }
-                 }
-                 else
-                 throw runtime_error("parameter should be an integer");
-                 else if (whichArgument > 6 && whichArgument < 12)
-                 if (!(ss >> dArg)) {
-                 
-                 }
-                 */
                 
-                
-                if (ss >> iArg) {
-                    int iValue = atoi(argv[i + 1]);
-                    if (argument == "-N") N = iValue;
-                    else if (argument == "-S") S = iValue;
-                    else if (argument == "-maxTime") maxTime = iValue;
-                    else if (argument == "-deathAge") deathAge = iValue;
-                    else if (argument == "-deathAgePredators") deathAge = iValue;
-                    else if (argument == "-initPredatorDensity") initPredatorDensity = iValue;
-                    else if (argument == "-growth0") growth0 = iValue;
-                    
-                }
-                else if (ss >> dArg) {
-                    double dValue = atof(argv[i + 1]);
-                    if (argument == "-meanSize0") meanSize0 = dValue;
-                    else if (argument == "-stdSize0") stdSize0 = dValue;
-                    else if (argument == "-killConversion") killConversion = dValue;
-                    else if (argument == "-mutationalVariance") mutationalVariance = dValue;
-                    else if (argument == "-mutationRate") mutationRate = dValue;
-                    
-                    else if (argument == "-alpha") alphas.push_back(dValue);
-                    else if (argument == "-beta") betas.push_back(dValue);
-                    else if (argument == "-gamma") gammas.push_back(dValue);
-                }
-                else if (ss >> sArg) {
-                    inputFileName = string(argv[i + 1]);
-                    if (argument == "-alpha") alphas = readParameters(inputFileName);
-                    else if (argument == "-beta") betas = readParameters(inputFileName);
-                    else if (argument == "-gamma") gammas = readParameters(inputFileName);
-                }
+                 if (whichArgument <= 7)
+                     if (ss >> iArg) {
+                         iValue = atoi(argv[i + 1]);
+                         switch (whichArgument) {
+                             case 0: N = iValue; break;
+                             case 1: S = iValue; break;
+                             case 2: maxTime = iValue; break;
+                             case 3: deathAge = iValue; break;
+                             case 4: deathAgePredators = iValue; break;
+                             case 5: initPredatorDensity = iValue; break;
+                             case 6: growth0 = iValue; break;
+                             case 7: maxReplicates = iValue; break;
+                         }
+                     }
+                     else
+                         throw runtime_error("parameter should be an integer");
+                 else if (whichArgument > 7)
+                     if (ss >> dArg) {
+                         dValue = atof(argv[i+1]);
+                         switch (whichArgument) {
+                             case 8: meanSize0 = dValue; break;
+                             case 9: stdSize0 = dValue; break;
+                             case 10: killConversion = dValue; break;
+                             case 11: mutationalVariance = dValue; break;
+                             case 12: mutationRate = dValue; break;
+                             case 13: predationPressure = dValue; break;
+                             case 14: alphas.push_back(dValue); break;
+                             case 15: betas.push_back(dValue); break;
+                             case 16: gammas.push_back(dValue); break;
+                         }
+                     }
+                     else {
+                         inputFileName = string(argv[i+1]);
+                         switch (whichArgument) {
+                             case 14:
+                                 alphas = readParameters(inputFileName);
+                                 break;
+                             case 15:
+                                 betas = readParameters(inputFileName);
+                                 break;
+                             case 16:
+                                 gammas = readParameters(inputFileName);
+                                 break;
+                             default: throw runtime_error("Parameter should be at least a double");
+                                 break;
+                         }
+                     }
+                i += 2;
                 
             } // end of loop through arguments
         } // end of if more than one argument
@@ -247,305 +250,309 @@ int main(int argc, char* argv[]) {
                     
                     const double gamma = gammas[g];
                     
-                    if (meanSize0 <= 0.0)
-                        throw runtime_error("meanSize cannot be zero or negative");
-                    if (stdSize0 <= 0.0)
-                        throw runtime_error("stdSize cannot be zero or negative");
-                    if (minBodySize < 0.0)
-                        throw runtime_error("minimal body size cannot be negative");
-                    
-                    // Set random seed
-                    auto tp = chrono::high_resolution_clock::now();
-                    unsigned seed = static_cast<unsigned>(tp.time_since_epoch().count());
-                    rng.seed(seed);
-                    
-                    // Declare an initial population of N individuals
-                    vector <ind> population(N);
-                    assert(population.size() == N);
-                    
-                    // Initialize size of individuals from normal distribution with given mean and standard deviation
-                    for (int i = 0; i < population.size(); ++i) {
-                        int a = 0;
-                        do {
-                            population[i].size = bodySizeDistribution(rng);
-                            ++a;
-                            // If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
-                            // but not too many times
-                        } while (population[i].size <= minBodySize && a < maxSampling);
-                        if (population[i].size < minBodySize)
-                            throw runtime_error("negative values of body size were generated");
-                        //cout << population[i].size << ' ';
-                    }
-                    //cout << endl;
-                    
-                    // Initialize predator population
-                    if (initPredatorDensity < 0)
-                        throw runtime_error("initial density of predators cannot be negative");
-                    if (deathAgePredators <= 0)
-                        throw runtime_error("death rate of predators must be at least one year");
-                    
-                    int nPredators = initPredatorDensity;
-                    bool isExtinctPredator = initPredatorDensity == 0 ? true : false;
-                    vector<int> birthRecord(deathAgePredators); // vector recording number of predator born in the last <predator lifespan> years
-                    birthRecord.back() = initPredatorDensity;
-                    assert(birthRecord.size() == deathAgePredators);
-                    
-                    if (initPredatorDensity == 0)
-                        cout << "Simulation with no predators" << endl;
-                    
-                    
-                    // Generation step loop
-                    for (int t = 1; t <= maxTime; ++t) {
+                    for (int replicate = 1; replicate <= maxReplicates; ++replicate) {
                         
-                        //cout << t << endl;
+                        if (meanSize0 <= 0.0)
+                            throw runtime_error("meanSize cannot be zero or negative");
+                        if (stdSize0 <= 0.0)
+                            throw runtime_error("stdSize cannot be zero or negative");
+                        if (minBodySize < 0.0)
+                            throw runtime_error("minimal body size cannot be negative");
                         
-                        // Check if there still are individuals in the population
-                        if (population.empty()) {
-                            cerr << "Generation " << t << ": population went extinct\n";
-                            exit(EXIT_SUCCESS);
-                        }
+                        // Open output file
+                        ostringstream oss;
+                        oss << "bodysizes_" << alpha << "_" << beta << "_" << gamma <<"_r" << replicate << ".csv";
+                        string strFilename = oss.str();
+                        ofstream ofs;
+                        ofs.open(strFilename);
                         
+                        // Set random seed
+                        auto tp = chrono::high_resolution_clock::now();
+                        unsigned seed = static_cast<unsigned>(tp.time_since_epoch().count());
+                        rng.seed(seed);
                         
-                        // Declare the number of food patches available as defined by island surface
-                        // foodPatches is a vector of subvectors: each subvector says which individuals are on the patch
-                        vector<vector<int> > foodPatches(S);
-                        assert(foodPatches.size() == S);
+                        // Declare an initial population of N individuals
+                        vector <ind> population(N);
+                        assert(population.size() == N);
                         
-                        
-                        
-                        // (Re)Shuffling the population vector
-                        shuffleVector(population, rng);
-                        
-                        
-                        // 1 - ASSIGNING INDIVIDUALS TO FOOD PATCHES
+                        // Initialize size of individuals from normal distribution with given mean and standard deviation
                         for (int i = 0; i < population.size(); ++i) {
-                            foodPatches[i % S].push_back(i);
+                            int a = 0;
+                            do {
+                                population[i].size = bodySizeDistribution(rng);
+                                ++a;
+                                // If the size of an individual is too small, redraw it (the normal distribution is truncated in zero)
+                                // but not too many times
+                            } while (population[i].size <= minBodySize && a < maxSampling);
+                            if (population[i].size < minBodySize)
+                                throw runtime_error("negative values of body size were generated");
                         }
                         
+                        // Initialize predator population
+                        if (initPredatorDensity < 0)
+                            throw runtime_error("initial density of predators cannot be negative");
+                        if (deathAgePredators <= 0)
+                            throw runtime_error("death rate of predators must be at least one year");
                         
+                        int nPredators = initPredatorDensity;
+                        bool isExtinctPredator = initPredatorDensity == 0 ? true : false;
+                        vector<int> birthRecord(deathAgePredators); // vector recording number of predator born in the last <predator lifespan> years
+                        birthRecord.back() = initPredatorDensity;
+                        assert(birthRecord.size() == deathAgePredators);
                         
-                        // 2 - PREDATION
+                        if (initPredatorDensity == 0)
+                            clog << "Simulation with no predators" << endl;
                         
-                        // Vector of survivors of predation
-                        vector<ind> survivors;
-                        
-                        int nKills = 0;
-                        if (!isExtinctPredator) {
+                        // Generation step loop
+                        for (int t = 1; t <= maxTime; ++t) {
                             
-                            // Every predator picks a patch at random, and if preys are present, eats one
-                            for (int j = 0; j < nPredators; ++j) {
+                            // Check if there still are individuals in the population
+                            if (population.empty()) {
+                                cerr << "Generation " << t << ": population went extinct\n";
+                                break;
+                            }
+
+                            
+                            cout << "Time " << t << ": " << population.size() << " preys and " << nPredators << " predators" << endl;
+                            
+                            // Record individual bodysizes
+                            for (int i = 0; i < population.size(); ++i)
+                                ofs << population[i].size << ",";
+                            ofs << endl;
+                            
+                            // Declare the number of food patches available as defined by island surface
+                            // foodPatches is a vector of subvectors: each subvector says which individuals are on the patch
+                            vector<vector<int> > foodPatches(S);
+                            assert(foodPatches.size() == S);
+                            
+                            // (Re)Shuffling the population vector
+                            shuffleVector(population, rng);
+                            
+                            // 1 - ASSIGNING INDIVIDUALS TO FOOD PATCHES
+                            for (int i = 0; i < population.size(); ++i) {
+                                foodPatches[i % S].push_back(i);
+                            }
+                            
+                            // 2 - PREDATION
+                            
+                            // Vector of survivors of predation
+                            vector<ind> survivors;
+                            
+                            nPredators = floor(predationPressure * population.size());
+                            
+                            int nKills = 0;
+                            if (!isExtinctPredator) {
                                 
-                                // Pick a patch
-                                uniform_int_distribution<int> pickPatch(0, S - 1);
-                                int patch = pickPatch(rng);
-                                assert(patch >= 0 && patch <= S - 1);
-                                
-                                int prey;
-                                
-                                // If there is one individual on that patch, eat it
-                                if (foodPatches[patch].size() >= 1) {
-                                    if (foodPatches[patch].size() == 1)
-                                        prey = 0;
+                                // Every predator picks a patch at random, and if preys are present, eats one
+                                for (int j = 0; j < nPredators; ++j) {
                                     
-                                    // If there are more...
-                                    else if (foodPatches[patch].size() > 1) {
+                                    // Pick a patch
+                                    uniform_int_distribution<int> pickPatch(0, S - 1);
+                                    int patch = pickPatch(rng);
+                                    assert(patch >= 0 && patch <= S - 1);
+                                    
+                                    int prey;
+                                    
+                                    // If there is one individual on that patch, eat it
+                                    if (foodPatches[patch].size() >= 1) {
+                                        if (foodPatches[patch].size() == 1)
+                                            prey = 0;
                                         
-                                        // Probabilities of each individual in the patch to be caught, depending on body size(or not if gamma = 0)
-                                        vector<double> probCatch(foodPatches[patch].size());
-                                        assert(probCatch.size() == foodPatches[patch].size());
-                                        double sum = 0.0;
-                                        for (int i = 0; i < foodPatches[patch].size(); ++i) {
-                                            probCatch[i] = pow(population[foodPatches[patch][i]].size, exp(gamma) - 1.0);
-                                            sum += probCatch[i];
-                                        }
-                                        for (int i = 0; i < foodPatches[patch].size(); ++i) {
-                                            probCatch[i] /= sum;
-                                            assert(probCatch[i] >= 0.0 && probCatch[i] <= 1.0);
+                                        // If there are more...
+                                        else if (foodPatches[patch].size() > 1) {
+                                            
+                                            // Probabilities of each individual in the patch to be caught, depending on body size(or not if gamma = 0)
+                                            vector<double> probCatch(foodPatches[patch].size());
+                                            assert(probCatch.size() == foodPatches[patch].size());
+                                            double sum = 0.0;
+                                            for (int i = 0; i < foodPatches[patch].size(); ++i) {
+                                                probCatch[i] = pow(population[foodPatches[patch][i]].size, exp(gamma) - 1.0);
+                                                sum += probCatch[i];
+                                            }
+                                            for (int i = 0; i < foodPatches[patch].size(); ++i) {
+                                                probCatch[i] /= sum;
+                                                assert(probCatch[i] >= 0.0 && probCatch[i] <= 1.0);
+                                            }
+                                            
+                                            // Pick a random prey
+                                            discrete_distribution<int> pickPrey(probCatch.begin(), probCatch.end());
+                                            prey = pickPrey(rng);
+                                            assert(prey >= 0 && prey < foodPatches[patch].size());
                                         }
                                         
-                                        // Pick a random prey
-                                        discrete_distribution<int> pickPrey(probCatch.begin(), probCatch.end());
-                                        prey = pickPrey(rng);
-                                        assert(prey >= 0 && prey < foodPatches[patch].size());
+                                        // Prey is eaten
+                                        population[foodPatches[patch][prey]].isEaten = true;
+                                        
+                                        // Prey is removed from the patch
+                                        vector<int> patchSurvivors;
+                                        for (int i = 0; i < foodPatches[patch].size(); ++i)
+                                            if (!population[foodPatches[patch][i]].isEaten)
+                                                patchSurvivors.push_back(foodPatches[patch][i]);
+                                        
+                                        assert(patchSurvivors.size() == foodPatches[patch].size() - 1);
+                                        
+                                        foodPatches[patch] = patchSurvivors;
+                                        
+                                        for (int i = 0; i < foodPatches[patch].size(); ++i)
+                                            assert(!population[foodPatches[patch][i]].isEaten);
+                                        
+                                        // Update the number of kills
+                                        ++nKills;
                                     }
                                     
-                                    // Prey is eaten
-                                    population[foodPatches[patch][prey]].isEaten = true;
+                                } // end of loop through predators
+                                
+                              
+                                // Population will be updated later
+                                // To avoid index mismatches in the competition process
+                                
+                            } // end of predation
+                            
+                            
+                            // 3 - ASYMETRIC COMPETITION
+                            // For each patch...
+                            for (int p = 0; p < foodPatches.size(); ++p) {
+                                
+                                // If that patch is occupied by more than one indiv, then competition happens
+                                if (foodPatches[p].size() > 1) {
                                     
-                                    // Prey is removed from the patch
-                                    vector<int> patchSurvivors;
-                                    for (int i = 0; i < foodPatches[patch].size(); ++i)
-                                        if (!population[foodPatches[patch][i]].isEaten)
-                                            patchSurvivors.push_back(foodPatches[patch][i]);
-                                    
-                                    assert(patchSurvivors.size() == foodPatches[patch].size() - 1);
-                                    
-                                    foodPatches[patch] = patchSurvivors;
-                                    
-                                    for (int i = 0; i < foodPatches[patch].size(); ++i)
-                                        assert(!population[foodPatches[patch][i]].isEaten);
-                                    
-                                    // Update the number of kills
-                                    ++nKills;
-                                }
-                                
-                            } // end of loop through predators
-                            
-                            cout << "Nkills " << nKills << endl;
-                            
-                            // Population will be updated later
-                            // To avoid index mismatches in the competition process
-                            
-                        } // end of predation
-                        
-                        
-                        
-                        
-                        
-                        // 3 - ASYMETRIC COMPETITION
-                        // For each patch...
-                        for (int p = 0; p < foodPatches.size(); ++p) {
-                            
-                            // If that patch is occupied by more than one indiv, then competition happens
-                            if (foodPatches[p].size() > 1) {
-                                
-                                // Probabilities of each individual in the patch to win, depending on body size(or not if alpha = 0)
-                                vector<double> probWin(foodPatches[p].size());
-                                assert(probWin.size() == foodPatches[p].size());
-                                double sum = 0.0;
-                                for (int i = 0; i < foodPatches[p].size(); ++i) {
-                                    probWin[i] = pow(population[foodPatches[p][i]].size, exp(alpha) - 1.0);
-                                    sum += probWin[i];
-                                }
-                                for (int i = 0; i < foodPatches[p].size(); ++i) {
-                                    probWin[i] /= sum;
-                                    assert(probWin[i] >= 0.0 && probWin[i] <= 1.0);
-                                }
-                                
-                                // Draw the outcome of competition
-                                discrete_distribution<int> competitionEvent(probWin.begin(), probWin.end());
-                                const int competitionOutcome = competitionEvent(rng);
-                                int iWinner = foodPatches[p][competitionOutcome];
-                                
-                                // The winner receives the food
-                                for (int j = 0; j < foodPatches[p].size(); ++j) {
-                                    population[foodPatches[p][j]].hasFood = foodPatches[p][j] == iWinner ? true : false;
-                                }
-                                
-                                
-                                
-                            }
-                            
-                            // If only one individual, then it takes the food
-                            else if (foodPatches[p].size() == 1) {
-                                population[foodPatches[p][0]].hasFood = true;
-                            }
-                            
-                        }
-                        
-                        
-                        // Who survived?
-                        for (int i = 0; i < population.size(); ++i) {
-                            if (!population[i].isEaten)
-                                survivors.push_back(population[i]);
-                        }
-                        assert(survivors.size() <= population.size());
-                        
-                        // Only survivors of predation remain in the population
-                        population = survivors;
-                        
-                        
-                        // 4 - REPRODUCTION OF PREYS
-                        
-                        // Identify current breeding individuals
-                        int iCurrentPop = population.size();
-                        //cout << "Gen" << t << " population size = " << iCurrentPop << endl;
-                        vector <ind> populationNew;
-                        
-                        for (int i = 0; i < iCurrentPop; ++i) {
-                            
-                            assert(!(population[i].age < 0) && !(population[i].age > deathAge));
-                            assert(!population[i].isEaten);
-                            
-                            // Increment ageing
-                            ++population[i].age;
-                            //cout << "Adult   of size " << population[i].size << " and " << population[i].age << " gen old" << endl;
-                            
-                            // Add breeder to the next gen population if not too old
-                            if (population[i].age < deathAge)
-                                populationNew.push_back(population[i]);
-                            
-                            // Produce a number of offspring based on size
-                            if (population[i].hasFood) {
-                                
-                                // expense food on offspring production
-                                population[i].hasFood = false;
-                                
-                                int iLitterSize = getNbOffspring(population[i].size, beta, growth0, epsilon, maxNOffspring);
-                                
-                                for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
-                                    
-                                    // Create a new individual that is a clone of its parent with age 0
-                                    ind newborn = population[i];
-                                    newborn.age = 0;
-                                    
-                                    // Draw a mutation event
-                                    if (mutationEvent(rng)) {
-                                        //cout << "<MUTATION> ";
-                                        double mutationStep;
-                                        do {
-                                            mutationStep = mutation(rng);
-                                        } while (newborn.size + mutationStep < minBodySize); // constrain mutation to min size
-                                        newborn.size += mutationStep;
+                                    // Probabilities of each individual in the patch to win, depending on body size(or not if alpha = 0)
+                                    vector<double> probWin(foodPatches[p].size());
+                                    assert(probWin.size() == foodPatches[p].size());
+                                    double sum = 0.0;
+                                    for (int i = 0; i < foodPatches[p].size(); ++i) {
+                                        probWin[i] = pow(population[foodPatches[p][i]].size, exp(alpha) - 1.0);
+                                        sum += probWin[i];
                                     }
-                                    //cout << "Newborn of size " << newborn.size << " and " << newborn.age << " gen old" << endl;
-                                    // Add new individual to the next gen population
-                                    populationNew.push_back(newborn);
+                                    for (int i = 0; i < foodPatches[p].size(); ++i) {
+                                        probWin[i] /= sum;
+                                        assert(probWin[i] >= 0.0 && probWin[i] <= 1.0);
+                                    }
+                                    
+                                    // Draw the outcome of competition
+                                    discrete_distribution<int> competitionEvent(probWin.begin(), probWin.end());
+                                    const int competitionOutcome = competitionEvent(rng);
+                                    int iWinner = foodPatches[p][competitionOutcome];
+                                    
+                                    // The winner receives the food
+                                    for (int j = 0; j < foodPatches[p].size(); ++j) {
+                                        population[foodPatches[p][j]].hasFood = foodPatches[p][j] == iWinner ? true : false;
+                                    }
+                                    
+                                    
+                                    
                                 }
+                                
+                                // If only one individual, then it takes the food
+                                else if (foodPatches[p].size() == 1) {
+                                    population[foodPatches[p][0]].hasFood = true;
+                                }
+                                
                             }
-                            // else nothing happens, no food no baby (or babies but they die right away from starvation)
                             
-                        }
-                        //cout << "Gen" << t << " pop size before reproduction & death = " << iCurrentPop << endl;
-                        //cout << "Gen" << t << " pop size after  reproduction & death = " << populationNew.size() << endl;
-                        
-                        population = populationNew;
-                        
-                        if (population.empty()) {
-                            cerr << "Generation " << t << ": population went extinct\n";
-                            exit(EXIT_SUCCESS);
-                        }
-                        
-                        
-                        // 5 - REPRODUCTION AND DEATH OF PREDATORS
-                        
-                        if (!isExtinctPredator) {
                             
-                            // Reproduction
-                            int nBabyPredators = floor(nKills * killConversion);
-                            assert(nBabyPredators >= 0);
-                            //cout << nPredators << " + " << nBabyPredators << " = ";
-                            nPredators += nBabyPredators;
-                            //cout << nPredators << endl;
+                            // Who survived?
+                            for (int i = 0; i < population.size(); ++i) {
+                                if (!population[i].isEaten)
+                                    survivors.push_back(population[i]);
+                            }
+                            assert(survivors.size() <= population.size());
                             
-                            nPredators -= birthRecord[0];
-                            for (int j = 0; j < deathAgePredators - 1; ++j)
-                                birthRecord[j] = birthRecord[j + 1];
-                            birthRecord.back() = nBabyPredators;
-                        }
-                        
-                        
-                        
-                        // Warning if predators go extinct
-                        if (nPredators <= 0 && !isExtinctPredator) {
-                            cerr << "Generation " << t << ": predators went extinct\n";
-                            isExtinctPredator = true;
-                        }
-                        
-                        cout << "Time " << t << ": " << population.size() << " preys and " << nPredators << " predators" << endl;
-                        
+                            // Only survivors of predation remain in the population
+                            population = survivors;
+                            
+                            // 4 - REPRODUCTION OF PREYS
+                            
+                            // Identify current breeding individuals
+                            int iCurrentPop = population.size();
+                            //cout << "Gen" << t << " population size = " << iCurrentPop << endl;
+                            vector <ind> populationNew;
+                            int nOffspring = 0, nDeaths = 0;
+                            
+                            for (int i = 0; i < iCurrentPop; ++i) {
+                                
+                                assert(!(population[i].age < 0) && !(population[i].age > deathAge));
+                                assert(!population[i].isEaten);
+                                
+                                // Increment ageing
+                                ++population[i].age;
+                                
+                                // Add breeder to the next gen population if not too old
+                                if (population[i].age < deathAge)
+                                    populationNew.push_back(population[i]);
+                                else ++nDeaths;
+                                
+                                // Produce a number of offspring based on size
+                                if (population[i].hasFood) {
+                                    
+                                    // expense food on offspring production
+                                    population[i].hasFood = false;
+                                    
+                                    int iLitterSize = getNbOffspring(population[i].size, beta, growth0, epsilon, maxNOffspring);
+                                    
+                                    for (int iOffspring = 0; iOffspring < iLitterSize; ++iOffspring) {
+                                        // Create a new individual that is a clone of its parent with age 0
+                                        ++nOffspring;
+                                        ind newborn = population[i];
+                                        newborn.age = 0;
+                                        
+                                        // Draw a mutation event
+                                        if (mutationEvent(rng)) {
+                                            int trial = 0;
+                                            double mutationStep;
+                                            do {
+                                                mutationStep = mutation(rng);
+                                                ++trial;
+                                            } while (newborn.size + mutationStep < minBodySize && trial < maxSampling); // constrain mutation to min size
+                                            newborn.size += mutationStep;
+                                        }
+                                        // Add new individual to the next gen population
+                                        populationNew.push_back(newborn);
+                                    }
+                                }
+                                // else nothing happens, no food no baby (or babies but they die right away from starvation)
+                                
+                            }
+                            population = populationNew;
+
+                            if (population.empty()) {
+                                cerr << "Generation " << t << ": population went extinct\n";
+                                exit(EXIT_SUCCESS);
+                            }
+                            
+                            
+                            // 5 - REPRODUCTION AND DEATH OF PREDATORS
+                            /*
+                            if (!isExtinctPredator) {
+                             
+                                // Reproduction
+                                int nBabyPredators = floor(nKills * killConversion);
+                                assert(nBabyPredators >= 0);
+                                nPredators += nBabyPredators;
+                             
+                                // Death
+                                nPredators -= birthRecord[0];
+                                for (int j = 0; j < deathAgePredators - 1; ++j)
+                                    birthRecord[j] = birthRecord[j + 1];
+                                birthRecord.back() = nBabyPredators;
+                            }
+                            */
+                            
+                            
+                            // Warning if predators go extinct
+                            if (nPredators <= 0 && !isExtinctPredator) {
+                                cerr << "Generation " << t << ": predators went extinct\n";
+                                isExtinctPredator = true;
+                            }
+                            
+                            
+                            
+                            cout << "nOffspring = " << nOffspring << " nDeaths = " << nDeaths
+                                 << " nKills = "     << nKills << endl;
+                            
                     } // end of loop through time steps
                     
+                    } // end of this replicate
                 } // end of loop through gamma values
             } // end of loop through beta values
         } // end of loop through alpha values
