@@ -42,47 +42,77 @@ Another possible explanation for the absence of relationship between dwarfism of
 
 \section{The model}
 
-Biggiesmalls is an individual-based simulation model, meaning it simulates each individual animal in a population. More precisely, it is a birth-death process, meaning that only two events can happen to an individual with body size $x_i$: it can either give birth (for simplicity, here we assume asexual repoduction by fission i.e. production of one offspring) at rate $B(x_i)$, or die at rate $D(x_i)$.\\
-
-The birth rate of an individual is:
+Biggiesmalls is an individual-based simulation model, meaning it simulates each individual animal in a population. More precisely, it is a birth-death process, meaning that individuals can either give birth or die. Birth and death rates are calculated from the Lotka-Volterra model for growth under competition, where the growth rate of a category $i$ of individuals (e.g. a given body size) is:
 
 \[
-B(x_i) = R(x_i) \Bigg(1 - \frac{\sum_{j = 1, j \neq i}^{n} C(x_i - x_j)}{K(x_i)} \Bigg)
+\frac{dn_i}{dt} = R_i \Bigg( 1 - \frac{N_i}{K_i} \Bigg) n_i
 \]
 
-where $R(x_i)$ is the fecundity (in number of offpsring per unit time, which also represents generation time), and depends on body size according to the allometric relationship (Blueweiss et al. 1978):
+Where $n_i$ is the number of individuals of type $i$ in the population, $R_i$ is the net per capita growth rate (without accounting for competition) and $\frac{N_i}{K_i}$ quantifies density-dependence, with $N_i$ being the effective population density that affects class $i$, and $K_i$ being the carrying capacity of class $i$.\\
+
+The effective population density $N_i$ competing with and individual of body size $x_i$ depends on the body sizes of the other individuals in the population:
 
 \[
-R(x_i) = 0.025 x_i^{-0.25}
+N_i = 1 + \sum_{j = 1, j \neq i} C(x_i - x_j)
 \]
 
-The numerator of the fraction between brackets represents the effect of asymmetric competition, where $C(x_i - x_j)$ is the competition kernel i.e. the cost for an individual $i$ to compete with an individual $j$. This cost is summed over all individuals in the population to yield a net cost of competition. $C(x_i - x_j)$ is a sigmoid function whose slope at zero is controlled by $\alpha$, the intensity of asymmetric competition. This means that if $j$ is larger than $i$, $C(x_i - x_j)$ will be positive, meaning that $i$ will experience a positive cost (i.e. $i$ will "loose" some food in the competition). But if $i$ is larger than $j$, the cost will be negative and $i$ will "gain" something from the competition. The outcome of competition between two individuals can never be higher than $1$ or lower than $-1$. Imagine that each individual has one unit of food before competition: upon competition, an individual cannot steal more food than the competitor has, nor can it loose more food than it itself possesses.\\
+where $C(x_i - x_j)$ reprensents the intensity of competition perceived by an individual with body size $x_i$ from an individual with body size $x_j$. $C(x_i - x_j)$ ranges from zero (not affected at all) to one (fully affected) and is a logistic function, reflecting the asymmetry in the outcome of competition based on the difference in body size:
 
 \[
-C(x_i - x_j) = 1 - \frac{2}{1 + e^{-\alpha (x_i - x_j)}}
+C(x_i - x_j) = \frac{1}{1 + e ^{-\alpha (x_i - x_j)}}
 \]
 
-The carrying capacity, $K(x_i)$ reflects the number of individuals of size $x_i$ that the island can support. Carrying capacity is an allometric function of body size:
+where $\alpha$ is the intensity of asymmetric competition. When $i$ is much larger than $j$, it is not affected by competing with $j$ (since it does not get its food stolen), while if $i$ is much smaller than $j$, it experiences a high cost of competition.\\
+
+The carrying capacity $K(x_i)$ depends on body size, with the idea that an island of given size can support less large animals than small animals:
 
 \[
-K(x_i) = K_0 x_i ^\kappa
+K(x_i) = K_0 x ^ \kappa
 \]
 
-where $K_0$ is the basal carrying capacity (for individuals of size $0$) and $\kappa$ is a scaling factor describing how the carrying capacity decreases with body size.\\
+where $\kappa$ controls the strength of the decrease in carrying capacity with increasing body size. $K_0$ is the basal carrying capacity (for hypothetical animals of body size zero), which represents island size (i.e. resource availability).\\
 
-As I said before, individuals also die at rate $D(x_i)$:
+The net per capita growth rate without competition, $R_i$, is the difference between the intrinsic birth rate $b(x_i)$ and the intrinsic death rate $d(x_i)$:
 
 \[
-D(x_i) = \frac{1}{l(x_i)}
+R(x_i) = b(x_i) - d(x_i)
 \]
 
-where $l(x_i)$ is the longevity, which is an allometric function of body size (Blueweiss et al. 1978):
+where $b(x_i)$ is an allometric function of body size given by (Blueweiss et al. 1978):
 
 \[
-l(x_i) = 630 x_i^{0.17}
+b(x_i) = 0.025 x ^{-0.25}
 \]
 
-This equation reflects the fact that larger individuals have longer lifespans.
+and $d(x_i)$ is the inverse of longevity, which is also an allometric function of body size, given by (Blueweiss et al. 1978):
+
+\[
+d(x_i) = \frac{1}{630 x ^ {0.17}}
+\]
+
+The growth rate of an individual $i$ can therefore be written from the Lotka-Volterra equation:
+
+\[
+R(x_i) - R(x_i) \frac{1 + \sum_{j \neq i} C(x_i - x_j)}{K(x_i)}
+\]
+
+which can be decomposed into a birth rate,
+
+\[
+B_i = R(x_i)
+\]
+
+and a death rate,
+
+\[
+D_i = R(x_i) \frac{1 + \sum_{j \neq i} C(x_i - x_j)}{K(x_i)}
+\]
+
+which are the two rates used to simulate the birth-death process. The simulation code is based on the Doob-Gillespie algorithm, a practical algorithm that allows to simulate continuous-time models. In brief, this algorithm simulates the process by (1) drawing the time to the next event (here, from an exponential distribution), then (2) sampling what event happens (either birth or death, with probabilities derived from the rates above), and (3) re-iterate that process many times until the time limit is reached.
+
+
+
+
 
 \section{On to the simulation}
 
