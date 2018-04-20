@@ -1,7 +1,7 @@
 # BIGGIESMALLS
 # This script models evolution of body size on an island
 # Using an individual birth-death process
-# Raphaël Scherrer
+# RaphaÃ«l Scherrer
 # 19/4/2018
 #-------------------------------------------------------
 
@@ -39,62 +39,38 @@ mutationalSd = 0.05
 # simulation time parameters
 maxTime = 1000
 timeSpan = 0.01 * maxTime # time span between two recording intervals
-
-
-#### FUNCTIONS ####
-
-# Function to calculate the birth rate of an individual given its potential competitors
-calc_birthRate = function(focalSize, bodySizes) {
-  
-  # Calculate the competition kernel of the current individual with each competitor in the population
-  competitionKernels = sapply(bodySizes, calc_competitionKernel, focalSize)
-  
-  # Sum the competition kernels
-  competition = sum(competitionKernels)
-  
-  # Calculate the fecundity of the individual
-  fecundity = basalFecundity * focalSize ^ fecundityScaling
-  
-  # Calculate the carrying capacity of the individual
-  carryingCapacity = basalCarryingCapacity * focalSize ^ carryingCapacityScaling
-  
-  # Calculate the birth rate
-  birthRate = fecundity * (1 - competition / carryingCapacity)
-  
-  return(birthRate)
-  
-} #end of calc_birthRate function
+recordFreq = 10 # frequency of events at which to record the population (once every # events)
 
 
 
-# Function to calculate the competition kernel between two individuals
-calc_competitionKernel = function(competitorSize, focalSize) {
+#### ACCESSORY FUNCTION ####
+
+
+# Function to calculate the competition experienced by an individual
+calc_competition = function(focalSize, bodySizes) {
   
-  # Calculate body size difference
-  bodySizeDifference = focalSize - competitorSize
+  # Find the focal individual in the population
+  focalId = which(bodySizes == focalSize)[1]
   
-  # Calculate competitive impact
-  competition = 1 - 2 / (1 + exp(-competitiveAdvantage * bodySizeDifference))
+  # Calculate the competitive interactions of the focal individual with all other individuals in the population
+  competitions = sapply(bodySizes[-focalId], function(competitorSize, focalSize) {
+    
+    # Calculate body size difference
+    bodySizeDifference = focalSize - competitorSize
+    
+    # Calculate competition kernel
+    competition = 1 / (1 + exp(-competitiveAdvantage * bodySizeDifference))
+    
+    return(competition)
+    
+  }, focalSize)
+  
+  # Calculate the sum of competitive interactions
+  competition = sum(competitions)
   
   return(competition)
   
-} #end of calc_competitionKernel function
-
-
-
-# Function to calculate the death rate of an individual
-calc_deathRate = function(focalSize) {
-  
-  # Calculate longevity
-  longevity = basalLongevity * focalSize ^ longevityScaling
-  
-  # Calculate death rate
-  deathRate = 1 / longevity
-  
-  return(deathRate)
-  
-}
-
+} #end of the function calc_competition
 
 
 #### MAIN FUNCTION ####
@@ -122,25 +98,25 @@ biggiesmalls = function() {
   # Initialize population size
   popSize = popSize0
   
-  # Set the time points
-  timepoints = seq(0, maxTime, timeSpan)
-  
   # Initialize storage list
-  storageList = vector(mode = "list", length = length(timepoints))
+  storageList = list()
   
   # Record initial population
   storageList[[1]] = bodySizes
+  
+  # Record initial time point
+  names(storageList)[1] = 0
+  
+  # Initilize storage index
+  i = 2
   
   #### SIMULATION ####
   
   # Initialize time
   t = 0
   
-  # Initialize timepoint index
-  i = 2
-  
-  # Initialize next time point
-  nextTimepoint = timepoints[i]
+  # Initialize event count
+  count = 0
   
   # While time has not exceeded simulation time:
   while(t <= maxTime) {
@@ -151,17 +127,29 @@ biggiesmalls = function() {
     # Print population size
     print(length(bodySizes))
     
-    # Calculate the rate of birth of each individual
-    birthRates = sapply(bodySizes, calc_birthRate, bodySizes)
+    # Calculate fertility of each individual
+    fertilities = basalFecundity * bodySizes ^ fecundityScaling
     
-    # Make sure there are no negative birth rates
-    birthRates[birthRates < 0] = 0
+    # Calculate longevity of each individual
+    longevities = basalLongevity * bodySizes ^ longevityScaling
     
-    # Calculate the rate of death of each individual
-    deathRates = sapply(bodySizes, calc_deathRate)
+    # Calculate death-by-senescence rate of each individual
+    senescences = 1 / longevities
     
-    # Make sure there are no negative death rates
-    deathRates[deathRates < 0] = 0
+    # Calculate the net growth rate of each individual (without competition)
+    netGrowthRate = fertilities - senescences
+    
+    # Calculate the impact of competition on each individual
+    competitions = sapply(bodySizes, calc_competition, bodySizes)
+    
+    # Calculate the carrying capacity of each individual
+    carryingCapacities = basalCarryingCapacity * bodySizes ^ carryingCapacityScaling
+    
+    # Calculate the birth rate of each individual
+    birthRates = fertilities
+    
+    # Calculate the death rate of each individual
+    deathRates = fertilities * (1 + competitions) / carryingCapacities
     
     # Calculate the total rate of events
     totalRate = sum(c(birthRates, deathRates))
@@ -169,22 +157,24 @@ biggiesmalls = function() {
     # Sample the next event from an exponential distribution
     dt = rexp(n = 1, rate = 1 / totalRate)
     
-    # What event is happening? Equal probabilities of birth and death (supposes that pop size is not too different from carrying capacity)
-    birthOrDeath = as.logical(rbinom(n = 1, size = 1, prob = 0.5))
+    # Set negative birth rates to zero
+    birthRates[birthRates < 0] = 0
     
-    # Simulate a birth or death event
-    if(birthOrDeath) {
-      
-      # If a birth happens
-      
-      # Calculate the probabilities of birth of each individual
-      probabilities = c(birthRates / totalRate)
-      
-      # Sample who is giving birth
-      id = sample.int(n = popSize, size = 1, prob = probabilities)
+    # Set negative death rates to zero
+    deathRates[deathRates < 0] = 0
+    
+    # Calculate the probability of each event
+    probabilities = c(birthRates, deathRates) / totalRate
+    
+    # Sample the event that happens
+    id = sample.int(n = 2*popSize, size = 1, prob = probabilities)
+    
+    # If a birth happens...
+    if(id <= popSize) {
       
       # What is the body size of the newborn?
       newBodySize = bodySizes[id]
+      
       # Sample mutation event
       isMutation = as.logical(rbinom(n = 1, size = 1, prob = mutationRate))
       
@@ -204,26 +194,16 @@ biggiesmalls = function() {
       
     } else {
       
-      # Otherwise death occurs
+      # Or if death happens, kill the sampled individual
+      bodySizes = bodySizes[-(id - popSize)]
       
-      # Calculate the probabilities of death of each individual
-      probabilities = c(deathRates / totalRate)
-      
-      # Sample who is dying
-      id = sample.int(n = popSize, size = 1, prob = probabilities)
-      
-      # Kill that individual
-      bodySizes = bodySizes[-id]
-      
-    } #end of birth or death event
+    } # end of birth or death
     
 
-    
     # Update population size
     popSize = length(bodySizes)
     
-    # If the new population size is zero, pop has gone extinct
-    # Return an NA
+    # If the new population size is zero, pop has gone extinct, stop the simulation
     if(popSize == 0) {
       
       print(paste("Population has gone extinct at t =", t))
@@ -232,23 +212,26 @@ biggiesmalls = function() {
       
     }
     
-    # Have we just reached a time point?
-    if(t >= nextTimepoint) {
-      
-      # If yes, record the state of the population
-      storageList[[i]] = bodySizes
-      
-      # Update the next time point
-      nextTimepoint = timepoints[i + 1]
-      
-      # Update timepoint index
-      i = i + 1
-      
-    }
-    
     # Update time
     t = t + dt
     
+    # Update event count
+    count = count + 1
+    
+    # Is it time to record the population?
+    if(count %% recordFreq == 0) {
+      
+      # If yes, record the population
+      storageList[[i]] = bodySizes
+      
+      # Record the time
+      names(storageList)[i] = t
+      
+      # Update storage index
+      i = i + 1
+      
+    }
+
   } #end of while loop through time
   
   
