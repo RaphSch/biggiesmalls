@@ -59,7 +59,7 @@ calc_competition = function(focalSize, bodySizes) {
     bodySizeDifference = focalSize - competitorSize
     
     # Calculate competition kernel
-    competition = 1 / (1 + exp(-competitiveAdvantage * bodySizeDifference))
+    competition = 1 - 1 / (1 + exp(-competitiveAdvantage * bodySizeDifference))
     
     return(competition)
     
