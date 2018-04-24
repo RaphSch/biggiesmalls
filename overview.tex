@@ -59,7 +59,7 @@ N_i = 1 + \sum_{j = 1, j \neq i} C(x_i - x_j)
 where $C(x_i - x_j)$ reprensents the intensity of competition perceived by an individual with body size $x_i$ from an individual with body size $x_j$. $C(x_i - x_j)$ ranges from zero (not affected at all) to one (fully affected) and is a logistic function, reflecting the asymmetry in the outcome of competition based on the difference in body size:
 
 \[
-C(x_i - x_j) = \frac{1}{1 + e ^{-\alpha (x_i - x_j)}}
+C(x_i - x_j) = 1 - \frac{1}{1 + e ^{-\alpha (x_i - x_j)}}
 \]
 
 where $\alpha$ is the intensity of asymmetric competition. When $i$ is much larger than $j$, it is not affected by competing with $j$ (since it does not get its food stolen), while if $i$ is much smaller than $j$, it experiences a high cost of competition.\\
@@ -116,7 +116,7 @@ which are the two rates used to simulate the birth-death process. The simulation
 
 \section{On to the simulation}
 
-You will find the R script for the simulation on my GitHub repository. Go to GitHub, and look for RapSch. You will find a folder there with the code, in a file called biggiesmalls.R. Don't confuse it with biggiesmalls.txt, which is the C++ version of the program!\\
+You will find the R script for the simulation on my GitHub repository. Go to GitHub, and look for RaphSch. You will find a folder there with the code, in a file called biggiesmalls.R. Don't confuse it with biggiesmalls.txt, which is the C++ version of the program!\\
 
 The code is organized in the following parts: (1) the parameters, which you can change, (2) some accessory functions that are used to calculate the birth and death rates, (3) the main function, which contains all the information to run the simulation and (4) a command to actually launch the simulation. Have a look at the code and try to understand what every line is doing. If you have questions, don't hesitate to ask on Whatsapp. To run the code on your computer, just open the script in RStudio, set the parameters as you wish, then Ctrl+A to select all the text and Ctrl+Enter to run it all. At each birth or death, the simulation time and population size will be printed to the command prompt.\\
 
