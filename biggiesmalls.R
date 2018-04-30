@@ -15,29 +15,29 @@ rm(list = ls())
 islandSize = 100
 
 # Founder population
-bodySize0 = 100 # initial body size mean
-sdBodySize0 = 5 # initial standard deviation
+bodySize0 = 1000000 # initial body size mean
+sdBodySize0 = 20000 # initial standard deviation
 popSize0 = 100 # initial population size
 
 # parameter of the competition equation
-competitiveAdvantage = 1
+competitiveAdvantage = 0.0001
 
 # parameters of the life history trait equations:
 basalFecundity = 0.025
 fecundityScaling = -0.26 
-basalLongevity = 630 
+basalLongevity = 630
 longevityScaling = 0.17
 
 # parameters of the carrying capacity equation:
-basalCarryingCapacity = islandSize
-carryingCapacityScaling = -0.01
+resource0 = islandSize
+resourceScaling = -0.01
 
 # mutation rate and variance
 mutationRate = 0.01
 mutationalSd = 0.05
 
 # simulation time parameters
-maxTime = 1000
+maxTime = 10000
 timeSpan = 0.01 * maxTime # time span between two recording intervals
 recordFreq = 10 # frequency of events at which to record the population (once every # events)
 
@@ -56,10 +56,10 @@ calc_competition = function(focalSize, bodySizes) {
   competitions = sapply(bodySizes[-focalId], function(competitorSize, focalSize) {
     
     # Calculate body size difference
-    bodySizeDifference = focalSize - competitorSize
+    bodySizeDifference = (focalSize - competitorSize) / focalSize
     
     # Calculate competition kernel
-    competition = 1 - 1 / (1 + exp(-competitiveAdvantage * bodySizeDifference))
+    competition = 2 * (1 - 1 / (1 + exp(-competitiveAdvantage * bodySizeDifference)))
     
     return(competition)
     
@@ -86,7 +86,7 @@ biggiesmalls = function() {
   if(bodySize0 <= 0) stop("bodySize0 must be > 0")
   if(sdBodySize0 <= 0) stop("sdBodySize0 must be > 0")
   if(popSize0 <= 0) stop("popSize0 must be > 0")
-  if(basalCarryingCapacity <= 0) stop("basalCarryingCapacity must be > 0")
+  if(resource0 <= 0) stop("resource0 must be > 0")
   if(mutationRate < 0) stop("mutationRate must be >= 0")
   if(mutationalSd <= 0) stop("mutationalSd must be > 0")
   
@@ -124,47 +124,44 @@ biggiesmalls = function() {
     # Print elapsed time
     print(t)
     
-    # Print population size
-    print(length(bodySizes))
-    
     # Calculate fertility of each individual
-    fertilities = basalFecundity * bodySizes ^ fecundityScaling
+    fecundities = basalFecundity * bodySizes ^ fecundityScaling
     
     # Calculate longevity of each individual
     longevities = basalLongevity * bodySizes ^ longevityScaling
     
     # Calculate death-by-senescence rate of each individual
-    senescences = 1 / longevities
+    mortalities = 1 / longevities
     
     # Calculate the net growth rate of each individual (without competition)
-    netGrowthRate = fertilities - senescences
+    netGrowthRate = fecundities - mortalities
     
     # Calculate the impact of competition on each individual
-    competitions = sapply(bodySizes, calc_competition, bodySizes)
+    competitors = sapply(bodySizes, calc_competition, bodySizes)
     
     # Calculate the carrying capacity of each individual
-    carryingCapacities = basalCarryingCapacity * bodySizes ^ carryingCapacityScaling
+    resources = resource0 * bodySizes ^ resourceScaling
     
     # Calculate the birth rate of each individual
-    birthRates = fertilities
+    birthRates = netGrowthRate
     
     # Calculate the death rate of each individual
-    deathRates = fertilities * (1 + competitions) / carryingCapacities
+    deathRates = netGrowthRate * (1 + competitors) / resources
+    
+    # Pool all rates into one vector
+    allRates = c(birthRates, deathRates)
+    
+    # Set negative rates to zero
+    allRates[allRates < 0] = 0
     
     # Calculate the total rate of events
-    totalRate = sum(c(birthRates, deathRates))
+    totalRate = sum(allRates)
     
     # Sample the next event from an exponential distribution
-    dt = rexp(n = 1, rate = 1 / totalRate)
-    
-    # Set negative birth rates to zero
-    birthRates[birthRates < 0] = 0
-    
-    # Set negative death rates to zero
-    deathRates[deathRates < 0] = 0
+    dt = rexp(n = 1, rate = totalRate)
     
     # Calculate the probability of each event
-    probabilities = c(birthRates, deathRates) / totalRate
+    probabilities = allRates / totalRate
     
     # Sample the event that happens
     id = sample.int(n = 2*popSize, size = 1, prob = probabilities)
@@ -192,10 +189,14 @@ biggiesmalls = function() {
       # Append the newborn to the population
       bodySizes[popSize + 1] = newBodySize
       
+      print("birth")
+      
     } else {
       
       # Or if death happens, kill the sampled individual
       bodySizes = bodySizes[-(id - popSize)]
+      
+      print("death")
       
     } # end of birth or death
     
@@ -204,7 +205,7 @@ biggiesmalls = function() {
     popSize = length(bodySizes)
     
     # If the new population size is zero, pop has gone extinct, stop the simulation
-    if(popSize == 0) {
+    if(popSize <= 1) {
       
       print(paste("Population has gone extinct at t =", t))
       
@@ -253,3 +254,17 @@ biggiesmalls = function() {
 #### RUN THE SIMULATION ####
 
 output = biggiesmalls()
+
+#### PLOT THE RESULTS ####
+
+time = as.numeric(names(output))
+
+par(mfrow = c(2,2))
+
+plot(time, sapply(output, length), main = "Population size", xlab = "Time", ylab = "")
+plot(time, sapply(output, mean), main = "Mean body size", xlab = "Time", ylab = "")
+plot(time, sapply(output, function(x) sqrt(var(x))), main = "Standard deviation in body size", xlab = "Time", ylab = "")
+
+
+
+
