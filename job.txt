@@ -1,0 +1,41 @@
+# These commands create and submit as many job files as we have parameter sets
+# Loop through 4 values to generate all possible parameter combinations
+
+for((j = 1; j <= 7; j++)) # what island size
+do
+for((k = 1; k <= 8; k++)) # what initial body size
+do
+for((m = 1; m <= 6; m++)) # what competitive advantage
+do
+for((n = 1; n <= 7; n++)) # what resource scaling
+do
+
+# Then pass each combination to the script and submit it
+# By creating one job for each combination
+
+# Options
+echo '#!/bin/bash' > biggijob$j$k$m$n.txt # shebang and interpreter
+echo "#SBATCH --nodes=1" >> biggijob$j$k$m$n.txt # need just one node
+echo "#SBATCH --time=71:00:00" >> biggijob$j$k$m$n.txt # time you need
+echo "#SBATCH --mem=10GB" >> biggijob$j$k$m$n.txt # how much memory
+echo "#SBATCH --cpus-per-task=16" >> biggijob$j$k$m$n.txt
+
+
+# Commands
+echo "cd /data/$USER$" >> biggijob$j$k$m$n.txt # go to the proper directory
+echo "module load R" >> biggijob$j$k$m$n.txt # load R before using!
+echo "Rscript biggiesmalls.R $j $k $m $n" >> biggijob$j$k$m$n.txt # Pass arguments to the R script
+
+# Biggijob is ready, now submit it
+sbatch --partition=nodes --job-name=biggijob$j$k$m$n --mail-type=FAIL,TIME_LIMIT,END --mail-user=your.email@blabla.nl --output=biggijob$j$k$m$n-%j biggijob$j$k$m$n.txt
+
+done
+done
+done
+done
+
+
+# 1. Get Mobaxterm and login to peregrine
+# 2. Upload the biggiesmalls.R script on the cluster (make sure it is in an appropriate folder e.g. /data/$USER$)
+# 3. Copy all of the above and paste it in the command prompt to launch all the simulations (make sure you are in a folder where biggiesmalls.R is)
+# 4. Relax and come back later
