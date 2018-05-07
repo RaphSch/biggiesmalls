@@ -1,7 +1,7 @@
 # BIGGIESMALLS
 # This script models evolution of body size on an island
 # Using an individual birth-death process
-# Raphaël Scherrer
+# RaphaÃ«l Scherrer
 # 19/4/2018
 #-------------------------------------------------------
 
@@ -48,7 +48,7 @@ timeSpan = 0.01 * maxTime # time span between two recording intervals
 recordFreq = 10 # frequency of events at which to record the population (once every # events)
 
 # Vector of important parameters
-parameters = c(islandSize, competitiveAdvantage, bodySize0, sdBodySize0, popSize0, maxTime, mutationalSd, mutationRate)
+parameters = c(islandSize, competitiveAdvantage, resourceScaling, bodySize0, sdBodySize0, popSize0, maxTime, mutationalSd, mutationRate)
 
 
 #### ACCESSORY FUNCTION ####
