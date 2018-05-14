@@ -1,6 +1,6 @@
 # Job script to run in batch biggiesmalls from a table of predefined parameter combinations
 
-for((j = 1; j <= #number of rows in table of combinations; j++)) # what combination
+for((j = 1; j <= 27; j++)) # what combination
 do
 
 # Then pass each combination to the script and submit it
@@ -11,15 +11,14 @@ echo '#!/bin/bash' > biggijob$j$k$m$n.txt # shebang and interpreter
 echo "#SBATCH --nodes=1" >> biggijob$j$k$m$n.txt # need just one node
 echo "#SBATCH --time=71:00:00" >> biggijob$j$k$m$n.txt # time you need
 echo "#SBATCH --mem=10GB" >> biggijob$j$k$m$n.txt # how much memory
-echo "#SBATCH --cpus-per-task=16" >> biggijob$j$k$m$n.txt
+echo "#SBATCH --cpus-per-task=5" >> biggijob$j$k$m$n.txt
 
 
 # Commands
-echo "cd /data/$USER$" >> biggijob$j.txt # go to the proper directory
 echo "module load R" >> biggijob$j.txt # load R before using!
 echo "Rscript run_biggiesmalls.R $j" >> biggijob$j$k$m$n.txt # Pass arguments to the R script
 
 # Biggijob is ready, now submit it
-sbatch --partition=nodes --job-name=biggijob$j --mail-type=FAIL,TIME_LIMIT,END --mail-user=your.email@blabla.nl biggijob$j.txt
+sbatch --job-name=biggijob$j --mail-type=FAIL,TIME_LIMIT,END --mail-user=your.email@blabla.nl biggijob$j.txt
 
 done
