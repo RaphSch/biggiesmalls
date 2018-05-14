@@ -10,13 +10,13 @@
 
 
 # Function to calculate the competition experienced by an individual
-calc_competition = function(focalSize, bodySizes) {
+calc_competition = function(focalSize, bodySizes, competitiveAdvantage) {
   
   # Find the focal individual in the population
   focalId = which(bodySizes == focalSize)[1]
   
   # Calculate the competitive interactions of the focal individual with all other individuals in the population
-  competitions = sapply(bodySizes[-focalId], function(competitorSize, focalSize) {
+  competitions = sapply(bodySizes[-focalId], function(competitorSize, focalSize, competitiveAdvantage) {
     
     # Calculate body size difference
     bodySizeDifference = (focalSize - competitorSize) / focalSize
@@ -26,7 +26,7 @@ calc_competition = function(focalSize, bodySizes) {
     
     return(competition)
     
-  }, focalSize)
+  }, focalSize, competitiveAdvantage)
   
   # Calculate the sum of competitive interactions
   competition = sum(competitions)
@@ -62,7 +62,7 @@ biggiesmalls = function(parameters) {
   fecundityScaling = -0.26 
   basalLongevity = 630
   longevityScaling = 0.17
-
+  
   # parameters of the carrying capacity equation:
   resource0 = islandSize
   
@@ -126,7 +126,7 @@ biggiesmalls = function(parameters) {
     netGrowthRate = fecundities - mortalities
     
     # Calculate the impact of competition on each individual
-    competitors = sapply(bodySizes, calc_competition, bodySizes)
+    competitors = sapply(bodySizes, calc_competition, bodySizes, competitiveAdvantage)
     
     # Calculate the carrying capacity of each individual
     resources = resource0 * bodySizes ^ resourceScaling
@@ -189,7 +189,7 @@ biggiesmalls = function(parameters) {
       
     } # end of birth or death
     
-
+    
     # Update population size
     popSize = length(bodySizes)
     
@@ -221,7 +221,7 @@ biggiesmalls = function(parameters) {
       i = i + 1
       
     }
-
+    
   } #end of while loop through time
   
   
