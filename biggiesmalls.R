@@ -1,54 +1,9 @@
 # BIGGIESMALLS
-# This script models evolution of body size on an island
+# This function models evolution of body size on an island
 # Using an individual birth-death process
 # Raphaël Scherrer
 # 19/4/2018
 #-------------------------------------------------------
-
-# Empty the environment
-rm(list = ls())
-
-
-#### PARAMETERS ####
-
-arguments = as.numeric(commandArgs(TRUE))
-
-# Island
-islandSizes = c(100, 200, 400, 800, 1600, 3200, 6400)
-islandSize = islandSizes[arguments[1]]
-
-# Founder population
-bodySizes0 = c(1,10,100,1000,10000,100000,1000000,10000000) # initial body size mean
-bodySize0 = bodySizes0[arguments[2]]
-sdBodySize0 = 0.05 * bodySize0 # initial standard deviation
-popSize0 = 10 # initial population size
-
-# parameter of the competition equation
-competitiveAdvantages = c(0,0.001,0.01,0.1,1,5)
-competitiveAdvantage = competitiveAdvantages[arguments[3]]
-
-# parameters of the life history trait equations:
-basalFecundity = 0.025
-fecundityScaling = -0.26 
-basalLongevity = 630
-longevityScaling = 0.17
-
-# parameters of the carrying capacity equation:
-resource0 = islandSize
-resourceScalings = c(0,-0.001,-0.01,-0.1,-0.5,-1,-2)
-resourceScaling = resourceScalings[arguments[4]]
-
-# mutation rate and variance
-mutationRate = 0.01
-mutationalSd = 0.05
-
-# simulation time parameters
-maxTime = 50000
-timeSpan = 0.01 * maxTime # time span between two recording intervals
-recordFreq = 10 # frequency of events at which to record the population (once every # events)
-
-# Vector of important parameters
-parameters = c(islandSize, competitiveAdvantage, resourceScaling, bodySize0, sdBodySize0, popSize0, maxTime, mutationalSd, mutationRate)
 
 
 #### ACCESSORY FUNCTION ####
@@ -84,9 +39,35 @@ calc_competition = function(focalSize, bodySizes) {
 #### MAIN FUNCTION ####
 
 # Function to launch the simulation
-biggiesmalls = function() {
+biggiesmalls = function(parameters) {
   
   #### INITIALIZATION ####
+  
+  if(length(parameters) != 10) stop("parameters should have 10 elements")
+  
+  # Extract parameter values
+  islandSize = parameters[1]
+  competitiveAdvantage = parameters[2]
+  resourceScaling = parameters[3]
+  bodySize0 = parameters[4]
+  sdBodySize0 = parameters[5] * bodySize0
+  popSize0 = parameters[6]
+  maxTime = parameters[7]
+  mutationalSd = parameters[8]
+  mutationRate = parameters[9]
+  replicate = parameters[10]
+  
+  # parameters of the life history trait equations:
+  basalFecundity = 0.025
+  fecundityScaling = -0.26 
+  basalLongevity = 630
+  longevityScaling = 0.17
+
+  # parameters of the carrying capacity equation:
+  resource0 = islandSize
+  
+  timeSpan = 0.01 * maxTime # time span between two recording intervals
+  recordFreq = 10 # frequency of events at which to record the population (once every # events)
   
   # Assert that all parameters are fine
   if(islandSize <= 0) stop("islandSize must be > 0")
@@ -248,13 +229,7 @@ biggiesmalls = function() {
   #### OUTPUT ####
   
   # Create output file name
-  outputname = paste0("biggi_", paste(parameters, collapse = '_'))
-  
-  # Guess replicate number by looking if file is already in the directory
-  replicate = length(grep(outputname, list.files())) + 1
-  
-  # Update output file name accordingly
-  outputname = paste0(outputname, "_", replicate, ".rds")
+  outputname = paste0("biggi_", paste(parameters, collapse = '_'), ".rds")
   
   # Save that in a file
   saveRDS(storageList, outputname)
@@ -264,24 +239,6 @@ biggiesmalls = function() {
   
   
 } # end of function to run the program
-
-
-
-
-#### RUN THE SIMULATION ####
-
-output = biggiesmalls()
-
-#### PLOT THE RESULTS ####
-
-# time = as.numeric(names(output))
-# 
-# par(mfrow = c(2,2))
-# 
-# plot(time, sapply(output, length), main = "Population size", xlab = "Time", ylab = "")
-# plot(time, sapply(output, mean), main = "Mean body size", xlab = "Time", ylab = "")
-# plot(time, sapply(output, function(x) sqrt(var(x))), main = "Standard deviation in body size", xlab = "Time", ylab = "")
-
 
 
 
